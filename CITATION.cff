@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "Securing Agentic Architectures: A Deliberately Vulnerable Multi-Agent LLM Testbed"
+abstract: >-
+  Experimental prototype accompanying the master's thesis "Securing Agentic
+  Architectures" (TU Wien). A deliberately vulnerable three-agent LLM system
+  with seven attack scenarios (memory poisoning, indirect injection, cross-agent
+  propagation, planner hijacking, system prompt extraction, memory membership
+  probing, and tool result poisoning) and five defences (canary tokens, intent
+  anchoring, counterfactual plan diffing, output spotlighting, and a provenance-based
+  trust hierarchy), evaluated across fourteen models (six paid API models across
+  three vendors --- OpenAI, Anthropic, and DeepSeek --- and eight free local
+  open-weight models).
+type: software
+authors:
+  - family-names: Bajnok
+    given-names: "Dénes Ágoston"
+    affiliation: "TU Wien"
+version: 1.0.0
+date-released: "2026-10-29"
+license: MIT
+repository-code: "https://github.com/dbajnok99/mas-security-testbed"
+url: "https://github.com/dbajnok99/mas-security-testbed"
+doi: ""
+keywords:
+  - LLM
+  - multi-agent systems
+  - agent security
+  - prompt injection
+  - indirect prompt injection
+  - memory poisoning
+  - data exfiltration
+  - defense evaluation
