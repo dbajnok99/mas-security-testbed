@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Runtime logs (keep the final benchmark results for reproducibility)
+logs/*
+!logs/results_paid_api.json
+!logs/results_free_local.json
+
+
+# Sandbox: keep only the seed data files, ignore all generated/attack outputs
+sandbox/*
+!sandbox/README.md
+!sandbox/config.json
+!sandbox/credentials.txt
+!sandbox/users.csv
+
+# IDE
+.vscode/
