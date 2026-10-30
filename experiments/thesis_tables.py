@@ -3,8 +3,9 @@ Write every auto-generated table file the thesis \\input{}s, straight from the t
 result logs, so no number in those tables is typed by hand.
 
 Writes into thesis/chapters/:
-  tables_api.tex, tables_local.tex      overview + per-model ASR + canary/FPR/latency per group
-  tables_cost.tex                       FPR, derailment and latency cost, both groups side by side
+  tables_api.tex, tables_local.tex      overview + per-attack ASR + canary detection per group
+  tables_asr_api.tex, tables_asr_local.tex   one ASR table per model (appendix)
+  tables_cost.tex                       FPR, derailment, median time and overhead, both groups side by side
   appendix_permodel_api.tex, ..._local  per-model canary, FPR and derailment breakdowns
 
 Latency uses medians, not means: a single hung local trial (almost an hour) would
@@ -71,7 +72,6 @@ DERAIL_PATTERN = re.compile(r"decod|base64|encoded", re.IGNORECASE)
 # tool_result_poisoning patches get_weather.func after the Orchestrator is built,
 # but spotlight_tools() already captured the original function, so under
 # spotlighting the poisoned output is never returned.
-NOT_MEASURED = {("tool_result_poisoning", "spotlight"), ("tool_result_poisoning", "all")}
 DEFENCES = [c for c in DEFENSE_ORDER if c != "none"]
 
 
@@ -119,7 +119,7 @@ def display(model: str) -> str:
 
 
 def f2(v: float | None) -> str:
-    return "--" if v is None else f"{v:.2f}"
+    return "n/a" if v is None else f"{v:.2f}"
 
 
 def mean(xs):
@@ -129,7 +129,7 @@ def mean(xs):
 
 def pct(v: float | None) -> str:
     if v is None:
-        return "--"
+        return "n/a"
     if abs(v) < 3:
         return r"$\approx 0$\%"
     return f"${v:+.0f}$\\%"
@@ -150,8 +150,7 @@ class Run:
                 continue
             key = (t["model"], t["attack"], DEFENSE_TO_COND[tuple(t["defense"])])
             self.canary[key].append(bool(t.get("canary_hit")))
-            if (t["attack"], key[2]) not in NOT_MEASURED:
-                self.asr[key].append(bool(t["success"]))
+            self.asr[key].append(bool(t["success"]))
         for t in data["benign_trials"]:
             if t.get("error"):
                 continue
@@ -172,9 +171,8 @@ class Run:
         return mean([self.model_asr(m, c, attacks) for m in (models or self.models)])
 
     def de(self, c, models=None):
-        """Defence effectiveness against the undefended baseline on the same attacks."""
-        measured = [a for a in ATTACKS if (a, c) not in NOT_MEASURED]
-        return 1 - self.group_asr(c, models, measured) / self.group_asr("none", models, measured)
+        """Defence effectiveness against the undefended baseline."""
+        return 1 - self.group_asr(c, models) / self.group_asr("none", models)
 
     def attack_asr(self, a, c, models=None):
         return mean([self.rate(self.asr, m, a, c) for m in (models or self.models)])
@@ -234,9 +232,8 @@ def cond_header(first: str, conds) -> list[str]:
 def overview_table(run: Run, group: str, gkey: str):
     table_head(
         f"Mean attack success rate per model and defence condition, {group}, over the seven "
-        f"attacks ($N = 70$ trials per cell), or over six for Spotlight and All, where Tool "
-        f"Result Poisoning was not measured. DE compares each condition with the undefended "
-        f"baseline on the same attacks.",
+        f"attacks ($N = 70$ trials per cell). DE compares each condition with the undefended "
+        f"baseline on the same attacks; n/a marks the baseline itself.",
         f"tab:overview-{gkey}", "l" + "r" * len(DEFENSE_ORDER), cond_header("Model", DEFENSE_ORDER),
         short=f"Mean attack success rate per model and defence condition, {group}")
     for m in run.models:
@@ -249,18 +246,17 @@ def overview_table(run: Run, group: str, gkey: str):
         lo, hi = wilson_ci(*run.pooled(c))
         cis.append(f"[{lo:.2f},{hi:.2f}]")
     print(r"    95\% CI (pooled) & " + " & ".join(cis) + r" \\")
-    print(r"    DE & -- & " + " & ".join(f2(run.de(c)) for c in DEFENSE_ORDER[1:]) + r" \\")
+    print(r"    DE & n/a & " + " & ".join(f2(run.de(c)) for c in DEFENSE_ORDER[1:]) + r" \\")
     table_foot()
 
 
 def per_attack_table(run: Run, group: str, gkey: str):
     table_head(
-        f"Attack success rate per attack and defence condition, averaged over the {group}. "
-        f"n/m: not measured (see Section~\\ref{{sec:eval-threats}}).",
+        f"Attack success rate per attack and defence condition, averaged over the {group}.",
         f"tab:attack-cond-{gkey}", "l" + "r" * len(DEFENSE_ORDER), cond_header("Attack", DEFENSE_ORDER))
     for a in ATTACKS:
         print(f"    {ATTACK_LABELS[a]} & " + " & ".join(
-            "n/m" if (a, c) in NOT_MEASURED else f2(run.attack_asr(a, c)) for c in DEFENSE_ORDER) + r" \\")
+            f2(run.attack_asr(a, c)) for c in DEFENSE_ORDER) + r" \\")
     table_foot()
 
 
@@ -274,46 +270,15 @@ def canary_group_table(run: Run, group: str, gkey: str):
     table_foot()
 
 
-def fpr_group_table(run: Run, group: str, gkey: str):
-    table_head(
-        f"False positive rate (FPR) and derailment rate per defence on the 20 benign tasks, "
-        f"averaged over the {group}. A task counts as derailed when its output talks about "
-        f"decoding encoded content; this is a keyword match and so a lower bound.",
-        f"tab:fpr-results-{gkey}", "lcc", [r"\textbf{Defence}", r"\textbf{Mean FPR}", r"\textbf{Mean derailment}"],
-        small=False, short=f"False positive and derailment rate per defence, {group}")
-    for c in DEFENSE_ORDER:
-        fpr = "--" if c == "none" else f2(mean([run.fpr(m, c) for m in run.models]))
-        der = f2(mean([run.rate(run.derail, m, c) for m in run.models]))
-        print(f"    {COND_LABELS[c]} & {fpr} & {der} \\\\")
-    table_foot()
-
-
-def latency_group_table(run: Run, group: str, gkey: str):
-    table_head(
-        f"Median run time of a benign task per defence, {group}. Overhead is the median "
-        f"of each model's own median relative to its undefended baseline.",
-        f"tab:overhead-results-{gkey}", "lrr",
-        [r"\textbf{Defence}", r"\textbf{Median time (s)}", r"\textbf{Overhead}"], small=False)
-    for c in DEFENSE_ORDER:
-        secs = statistics.median([statistics.median(run.secs[(m, c)]) for m in run.models])
-        ov = "baseline" if c == "none" else pct(statistics.median([run.median_overhead(m, c) for m in run.models]))
-        print(f"    {COND_LABELS[c]} & {secs:.1f} & {ov} \\\\")
-    table_foot()
-
-
 def per_model_asr_tables(run: Run):
     for m in run.models:
         table_head(
             f"Attack success rate per attack and defence condition, {display(m)}, with the "
-            f"95\\% Wilson confidence interval ($N = 10$ trials per cell). Bold marks an ASR of 0; "
-            f"n/m marks a cell that was not measured.",
+            f"95\\% Wilson confidence interval ($N = 10$ trials per cell). Bold marks a cell with an ASR of 0.",
             f"tab:asr-results-{slug(m)}", "l" + "c" * len(DEFENSE_ORDER), cond_header("Attack", DEFENSE_ORDER))
         for a in ATTACKS:
             cells = []
             for c in DEFENSE_ORDER:
-                if (a, c) in NOT_MEASURED:
-                    cells.append("n/m")
-                    continue
                 v = run.asr[(m, a, c)]
                 lo, hi = wilson_ci(sum(v), len(v))
                 val = f"{sum(v) / len(v):.2f}"
@@ -336,8 +301,6 @@ def group_file(run: Run, group: str, gkey: str, src: str):
     overview_table(run, group, gkey)
     per_attack_table(run, group, gkey)
     canary_group_table(run, group, gkey)
-    fpr_group_table(run, group, gkey)
-    latency_group_table(run, group, gkey)
 
 
 def permodel_asr_file(run: Run, src: str):
@@ -351,28 +314,31 @@ def cost_file(api: Run, local: Run):
     print(f"% Auto-generated by experiments/thesis_tables.py from {API_LOG} and {LOCAL_LOG}.\n")
     print(r"\begin{table}[htbp]")
     print(r"  \centering")
-    print(r"  \caption{The cost of each defence on the 20 benign tasks, for both model groups:")
-    print(r"           false positive rate (FPR), derailment rate (lower bound), and median")
-    print(r"           latency overhead against each model's undefended baseline.}")
+    print(r"  \caption[The cost of each defence on the benign tasks, both groups]{The cost of each defence on the 20 benign tasks, for both model groups:")
+    print(r"           false positive rate (FPR), derailment rate (lower bound), median run time of a")
+    print(r"           benign task, and median latency overhead against each model's undefended")
+    print(r"           baseline. n/a marks the undefended baseline, which blocks nothing.}")
     print(r"  \label{tab:cost-compare}")
     print(r"  \footnotesize")
     print(r"  \begin{adjustbox}{max width=\textwidth}")
-    print(r"  \begin{tabular}{lrrrrrr}")
+    print(r"  \begin{tabular}{lrrrrrrrr}")
     print(r"    \toprule")
     print(r"    & \multicolumn{2}{c}{\textbf{FPR}} & \multicolumn{2}{c}{\textbf{Derailment}}"
-          r" & \multicolumn{2}{c}{\textbf{Latency overhead}} \\")
-    print(r"    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}")
+          r" & \multicolumn{2}{c}{\textbf{Median time (s)}} & \multicolumn{2}{c}{\textbf{Overhead}} \\")
+    print(r"    \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}\cmidrule(lr){8-9}")
     print(r"    \textbf{Defence} & \textbf{Paid} & \textbf{Local} & \textbf{Paid} & \textbf{Local}"
-          r" & \textbf{Paid} & \textbf{Local} \\")
+          r" & \textbf{Paid} & \textbf{Local} & \textbf{Paid} & \textbf{Local} \\")
     print(r"    \midrule")
-    for c in DEFENCES:
+    for c in DEFENSE_ORDER:
         cells = []
         for r in (api, local):
-            cells.append(f2(mean([r.fpr(m, c) for m in r.models])))
+            cells.append("n/a" if c == "none" else f2(mean([r.fpr(m, c) for m in r.models])))
         for r in (api, local):
             cells.append(f2(mean([r.rate(r.derail, m, c) for m in r.models])))
         for r in (api, local):
-            cells.append(pct(statistics.median([r.median_overhead(m, c) for m in r.models])))
+            cells.append(f"{statistics.median([statistics.median(r.secs[(m, c)]) for m in r.models]):.1f}")
+        for r in (api, local):
+            cells.append("baseline" if c == "none" else pct(statistics.median([r.median_overhead(m, c) for m in r.models])))
         print(f"    {COND_LABELS[c]} & " + " & ".join(cells) + r" \\")
     table_foot()
 

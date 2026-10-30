@@ -9,19 +9,19 @@ abstract: >-
   probing, and tool result poisoning) and five defences (canary tokens, intent
   anchoring, counterfactual plan diffing, output spotlighting, and a provenance-based
   trust hierarchy), evaluated across fourteen models (six paid API models across
-  three vendors --- OpenAI, Anthropic, and DeepSeek --- and eight free local
+  three vendors (OpenAI, Anthropic, and DeepSeek) and eight free local
   open-weight models).
 type: software
 authors:
   - family-names: Bajnok
     given-names: "Dénes Ágoston"
     affiliation: "TU Wien"
-version: 1.0.0
-date-released: "2026-10-29"
+version: 1.0.1
+date-released: "2026-10-30"
 license: MIT
 repository-code: "https://github.com/dbajnok99/mas-security-testbed"
 url: "https://github.com/dbajnok99/mas-security-testbed"
-doi: "10.5281/zenodo.23725403"
+doi: "10.5281/zenodo.23725402"
 keywords:
   - LLM
   - multi-agent systems
