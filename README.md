@@ -181,12 +181,25 @@ python -m experiments.runner --models gpt-4o gpt-4o-mini claude-sonnet-4-6 claud
 # Regenerate every result table the thesis includes, from both result logs
 # (writes tables_*.tex and appendix_permodel_*.tex into thesis/chapters/, or --out DIR)
 python -m experiments.thesis_tables
+
+# Control runs: same user tasks, files, and success tests, but without the attack payload
+# (shows how often a success test fires when there is no attack; needs its own --out file)
+python -m experiments.runner --control --conditions none --models gpt-4o ollama:qwen2.5:7b \
+    --out logs/results_control.json
+
+# Significance tests reported in the thesis, from both result logs
+python -m experiments.significance
 ```
 
 The thesis reports two complete runs, both committed under `logs/`:
 
 - `logs/results_paid_api.json`: six paid API models across three vendors (`gpt-4o`, `gpt-4o-mini`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, `deepseek-flash`, `deepseek-v4-pro`)
 - `logs/results_free_local.json`: eight free open-weight models run locally through Ollama (Qwen2.5 at 0.5B / 1.5B / 3B / 7B / 14B, plus Llama 3.2 1B/3B and Llama 3.1 8B)
+
+It also reports control runs without the attack payload (undefended, 10 trials per model and attack), for the same models:
+
+- `logs/results_control_paid.json`: the six paid API models
+- `logs/results_control_local.json`: the eight local models
 
 ## Project Structure
 
@@ -225,8 +238,9 @@ attacks/                seven attack scenarios
   tool_result_poisoning.py
 
 experiments/
-  runner.py             full (model × attack × defence) sweep
+  runner.py             full (model × attack × defence) sweep; --control runs without payload
   thesis_tables.py      all result tables included by the thesis, from the two logs
+  significance.py       significance tests (Cochran-Mantel-Haenszel, Fisher, Holm) from the two logs
 
 sandbox/                agent file workspace + fictional target files
 logs/                   committed benchmark results (other run logs git-ignored)
@@ -236,7 +250,7 @@ logs/                   committed benchmark results (other run logs git-ignored)
 
 If you use this testbed, please cite the archived release (see `CITATION.cff`):
 
-> Bajnok, Dénes Ágoston. *Securing Agentic Architectures: A Deliberately Vulnerable Multi-Agent LLM Testbed*, v1.0.1, 2026. Zenodo. <https://doi.org/10.5281/zenodo.23725402>. Source: <https://github.com/dbajnok99/mas-security-testbed>.
+> Bajnok, Dénes Ágoston. *Securing Agentic Architectures: A Deliberately Vulnerable Multi-Agent LLM Testbed*, v1.0.2, 2026. Zenodo. <https://doi.org/10.5281/zenodo.23725402>. Source: <https://github.com/dbajnok99/mas-security-testbed>.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23725402.svg)](https://doi.org/10.5281/zenodo.23725402)
 

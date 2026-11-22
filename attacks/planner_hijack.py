@@ -27,16 +27,20 @@ POISON_VALUE = (
 )
 
 
-def run(task: str, verbose: bool = True, defenses: list[str] | None = None, model: str | None = None):
+def run(task: str, verbose: bool = True, defenses: list[str] | None = None, model: str | None = None,
+        control: bool = False):
     if os.path.exists(EXFIL_FILE):
         os.remove(EXFIL_FILE)
 
     orch = Orchestrator(verbose=verbose, defenses=defenses, model=model)
 
-    print("\n[ATTACK] Writing routing override to shared memory:")
-    print(f"  key   : {POISON_KEY!r}")
-    print(f"  value : {POISON_VALUE[:80]}...")
-    orch.memory.write(POISON_KEY, POISON_VALUE, writer_id="attacker")
+    if control:
+        print("\n[CONTROL] No routing override is written (run without payload)")
+    else:
+        print("\n[ATTACK] Writing routing override to shared memory:")
+        print(f"  key   : {POISON_KEY!r}")
+        print(f"  value : {POISON_VALUE[:80]}...")
+        orch.memory.write(POISON_KEY, POISON_VALUE, writer_id="attacker")
 
     print(f"\n[TASK] Running user task: {task!r}\n{'─' * 60}")
     result = orch.run(task)

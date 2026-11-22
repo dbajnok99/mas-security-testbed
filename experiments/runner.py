@@ -30,6 +30,10 @@ Usage:
   python -m experiments.runner --models <all models of that file> \
       --attacks tool_result_poisoning --conditions spotlight all --redo --skip-benign \
       --out logs/results_free_local.json
+
+  # Control runs without payload (same tasks and success tests, no attack):
+  python -m experiments.runner --control --conditions none --models <models> \
+      --out logs/results_control_local.json
 """
 from __future__ import annotations
 
@@ -156,6 +160,7 @@ def run_attack_trial(
     defense_names: list[str],
     model: str | None = None,
     trial_i: int | None = None,
+    control: bool = False,
 ) -> dict:
     clean_sandbox()
     mod = ATTACKS[attack_name]
@@ -165,7 +170,8 @@ def run_attack_trial(
     t0 = time.monotonic()
     started_at = datetime.now(timezone.utc).isoformat()
     try:
-        orch, result, meta = mod.run(task=task, verbose=False, defenses=defenses, model=model)
+        orch, result, meta = mod.run(task=task, verbose=False, defenses=defenses, model=model,
+                                     control=control)
         elapsed = time.monotonic() - t0
         error = None
     except Exception as exc:
@@ -181,6 +187,7 @@ def run_attack_trial(
         "model":       model,
         "task":        task,
         "trial_i":     trial_i,
+        "control":     control,
         "started_at":  started_at,
         "success":     meta.get("success", False),
         "result":      _preview(result),
@@ -416,6 +423,10 @@ def parse_args() -> argparse.Namespace:
                         "The thesis runs are logs/results_paid_api.json and logs/results_free_local.json.")
     p.add_argument("--fresh", action="store_true",
                    help="Ignore any existing --out file and start over, instead of resuming it.")
+    p.add_argument("--control", action="store_true",
+                   help="Control runs: same user task, files, and success test, but without the "
+                        "attack payload. Measures how often a success test fires with no attack. "
+                        "Implies --skip-benign; use its own --out file.")
     p.add_argument("--redo", action="store_true",
                    help="Drop the existing attack trials of the selected --attacks x --conditions "
                         "(for the selected --models) from the --out file and run them again.")
@@ -444,6 +455,8 @@ def _benign_trial_key(t: dict) -> tuple:
 
 def main() -> None:
     args = parse_args()
+    if args.control:
+        args.skip_benign = True
     out_path = ROOT / args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -488,6 +501,13 @@ def main() -> None:
             "benign_trials": [],
         }
 
+    # never mix control trials and attack trials in one file
+    kinds = {bool(t.get("control")) for t in results["attack_trials"]}
+    if kinds and kinds != {args.control}:
+        sys.exit(f"{out_path} holds {'control' if True in kinds else 'attack'} trials; "
+                 f"use a separate --out file for {'control' if args.control else 'attack'} runs.")
+    results["meta"].setdefault("control", args.control)
+
     done_attack = {_attack_trial_key(t) for t in results["attack_trials"]}
     done_benign = {_benign_trial_key(t) for t in results["benign_trials"]}
 
@@ -513,7 +533,8 @@ def main() -> None:
                         continue
                     print(f"{tag} model={model} attack={attack_name} defense={cond_name} trial={trial_i + 1}",
                           end=" ... ", flush=True)
-                    trial = run_attack_trial(attack_name, cond_defenses, model=model, trial_i=trial_i)
+                    trial = run_attack_trial(attack_name, cond_defenses, model=model, trial_i=trial_i,
+                                             control=args.control)
                     results["attack_trials"].append(trial)
                     status = "SUCCESS" if trial.get("success") else "failed"
                     if trial.get("error"):

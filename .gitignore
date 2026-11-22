@@ -12,7 +12,8 @@ venv/
 logs/*
 !logs/results_paid_api.json
 !logs/results_free_local.json
-
+!logs/results_control_local.json
+!logs/results_control_paid.json
 
 # Sandbox: keep only the seed data files, ignore all generated/attack outputs
 sandbox/*
